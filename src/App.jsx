@@ -4,7 +4,7 @@ import { Search, MapPin, Wallet, ExternalLink, Bookmark, Layers, RefreshCw, Chev
 // ---- Point this at your running FastAPI server ----
 // Local dev: leave as-is. Once deployed, change to your real domain,
 // e.g. "https://api.yourdomain.com"
-const API_BASE = "http://localhost:8001";
+const API_BASE = "http://localhost:8000";
 
 const SOURCE_STYLE = {
   "104": { bg: "#FDF3E3", border: "#E0A93C", text: "#7A4E10", label: "104" },
@@ -35,7 +35,9 @@ export default function JobHunterApp() {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [sources, setSources] = useState({ "104": true, Cake: true });
-  const [selectedCityIds, setSelectedCityIds] = useState([]);
+  const [selectedCityIds, setSelectedCityIds] = useState([]); // empty = All Cities
+  const [cityDropdownOpen, setCityDropdownOpen] = useState(false);
+  const cityDropdownRef = useRef(null);
   const [salaryMin, setSalaryMin] = useState("");
   const [sort, setSort] = useState("recent");
   const [page, setPage] = useState(1);
@@ -60,6 +62,17 @@ export default function JobHunterApp() {
     setPage(1);
   }, [debouncedQuery, sources, selectedCityIds, salaryMin, sort]);
 
+  // close the city dropdown when clicking anywhere outside of it
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (cityDropdownRef.current && !cityDropdownRef.current.contains(e.target)) {
+        setCityDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   // load the city list + stats once — these barely change, no need to refetch per filter
   useEffect(() => {
     fetch(`${API_BASE}/api/cities`)
@@ -83,7 +96,7 @@ export default function JobHunterApp() {
     // (or neither) are on means "don't filter by source at all"
     if (activeSources.length === 1) params.set("source", activeSources[0]);
 
-    selectedCityIds.forEach((id) => params.append("city_id", id));
+    selectedCityIds.forEach((id) => params.append("city_id", id)); // none selected = All Cities
     if (salaryMin) params.set("salary_min", salaryMin);
     params.set("sort", sort);
     params.set("page", page);
@@ -113,6 +126,15 @@ export default function JobHunterApp() {
 
   const taiwanCities = useMemo(() => cities.filter((c) => !c.is_overseas), [cities]);
   const overseasCity = useMemo(() => cities.find((c) => c.is_overseas), [cities]);
+
+  const cityButtonLabel = useMemo(() => {
+    if (selectedCityIds.length === 0) return "All Cities";
+    if (selectedCityIds.length === 1) {
+      const c = cities.find((c) => c.id === selectedCityIds[0]);
+      return c ? c.city_en : "1 city";
+    }
+    return `${selectedCityIds.length} cities selected`;
+  }, [selectedCityIds, cities]);
 
   return (
     <div style={{ fontFamily: "'Inter', 'Noto Sans TC', sans-serif", background: "#F7F5F0", minHeight: "100%", padding: "32px 20px", color: "#2B2A27" }}>
@@ -179,9 +201,10 @@ export default function JobHunterApp() {
           </div>
 
           <input
-            type="number"
+            type="text"
+            inputMode="numeric"
             value={salaryMin}
-            onChange={(e) => setSalaryMin(e.target.value)}
+            onChange={(e) => setSalaryMin(e.target.value.replace(/\D/g, ""))} // strip anything that isn't a digit as the person types
             placeholder="Min salary (NT$/mo)"
             style={{ width: 150, padding: "9px 10px", borderRadius: 8, border: "1px solid #DEDBD0", fontSize: 13, background: "#FFFFFF" }}
           />
@@ -196,34 +219,67 @@ export default function JobHunterApp() {
           </select>
         </div>
 
-        <div style={{ display: "flex", gap: 20 }}>
-          {/* City filter sidebar */}
-          <div style={{ width: 160, flexShrink: 0 }}>
+        <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+          {/* City filter — dropdown button that opens a checkbox panel */}
+          <div ref={cityDropdownRef} style={{ width: 180, flexShrink: 0, position: "relative" }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#6B6A64", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.03em" }}>
               City
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 320, overflowY: "auto" }}>
-              {taiwanCities.map((c) => (
-                <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
-                  <input type="checkbox" checked={selectedCityIds.includes(c.id)} onChange={() => toggleCity(c.id)} />
-                  {c.city_en}
-                </label>
-              ))}
-              {overseasCity && (
-                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", marginTop: 6, paddingTop: 6, borderTop: "1px solid #E7E4DB" }}>
-                  <input type="checkbox" checked={selectedCityIds.includes(overseasCity.id)} onChange={() => toggleCity(overseasCity.id)} />
-                  {overseasCity.city_en}
-                </label>
-              )}
-              {selectedCityIds.length > 0 && (
-                <button
-                  onClick={() => setSelectedCityIds([])}
-                  style={{ marginTop: 8, fontSize: 12, color: "#B0562E", background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0 }}
-                >
-                  Clear cities
-                </button>
-              )}
-            </div>
+
+            <button
+              onClick={() => setCityDropdownOpen((o) => !o)}
+              style={{
+                width: "100%", textAlign: "left", padding: "9px 10px", borderRadius: 8,
+                border: "1px solid #DEDBD0", fontSize: 13, background: "#FFFFFF", cursor: "pointer",
+                display: "flex", justifyContent: "space-between", alignItems: "center", boxSizing: "border-box",
+              }}
+            >
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cityButtonLabel}</span>
+              <span style={{ color: "#9C9A91", marginLeft: 6 }}>{cityDropdownOpen ? "▲" : "▼"}</span>
+            </button>
+
+            {cityDropdownOpen && (
+              <div
+                style={{
+                  position: "absolute", top: "calc(100% + 4px)", left: 0, width: 240, zIndex: 10,
+                  background: "#FFFFFF", border: "1px solid #DEDBD0", borderRadius: 8,
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.08)", padding: 10,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                  <button
+                    onClick={() => setSelectedCityIds(cities.map((c) => c.id))}
+                    style={{ fontSize: 12, color: "#B0562E", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                  >
+                    Select all
+                  </button>
+                  <button
+                    onClick={() => setSelectedCityIds([])}
+                    style={{ fontSize: 12, color: "#B0562E", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                  >
+                    Clear (All Cities)
+                  </button>
+                </div>
+
+                <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+                  {taiwanCities.map((c) => (
+                    <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+                      <input type="checkbox" checked={selectedCityIds.includes(c.id)} onChange={() => toggleCity(c.id)} />
+                      {c.city_en}
+                    </label>
+                  ))}
+                  {overseasCity && (
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", marginTop: 4, paddingTop: 4, borderTop: "1px solid #E7E4DB" }}>
+                      <input type="checkbox" checked={selectedCityIds.includes(overseasCity.id)} onChange={() => toggleCity(overseasCity.id)} />
+                      {overseasCity.city_en}
+                    </label>
+                  )}
+                  {cities.length === 0 && (
+                    <div style={{ fontSize: 12, color: "#9C9A91" }}>No cities loaded — check /api/cities.</div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Results */}
