@@ -4,8 +4,8 @@ import { Search, MapPin, Wallet, ExternalLink, Bookmark, Layers, RefreshCw, Chev
 // ---- Point this at your running FastAPI server ----
 // Local dev: leave as-is. Once deployed, change to your real domain,
 // e.g. "https://api.yourdomain.com"
-const API_BASE = "http://localhost:8000";
-
+// const API_BASE = "http://localhost:8001";
+const API_BASE = "";
 const SOURCE_STYLE = {
   "104": { bg: "#FDF3E3", border: "#E0A93C", text: "#7A4E10", label: "104" },
   Cake: { bg: "#E7F3EC", border: "#3F9764", text: "#1F5C3B", label: "Cake" },
